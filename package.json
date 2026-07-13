@@ -1,0 +1,9 @@
+{
+  "name": "stylaria-nova-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend for the NOVA chat widget and contact form on the Stylaria Tech website.",
+  "dependencies": {
+    "nodemailer": "^6.9.14"
+  }
+}
