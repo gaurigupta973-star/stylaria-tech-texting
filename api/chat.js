@@ -1,7 +1,7 @@
 // api/chat.js
 // NOVA chat endpoint — the website's fetch("/api/chat") call lands here.
-// Talks to the Claude API and returns { reply, action } exactly how the
-// frontend (combined-footer-js.js) expects.
+// Talks to xAI's Grok API (OpenAI-compatible endpoint) and returns
+// { reply, action } exactly how the frontend (combined-footer-js.js) expects.
 
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
 // ^ In production, set ALLOWED_ORIGIN to your real site, e.g.
@@ -62,37 +62,39 @@ module.exports = async function handler(req, res) {
   }
   const message = (body && body.message ? String(body.message) : "").trim();
   if (!message) return res.status(400).json({ detail: "Message is required" });
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ detail: "Server is missing ANTHROPIC_API_KEY." });
+  if (!process.env.XAI_API_KEY) {
+    return res.status(500).json({ detail: "Server is missing XAI_API_KEY." });
   }
 
   try {
-    const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
+    // xAI's API is OpenAI-compatible — same request/response shape, different
+    // base URL, header, and model name.
+    const apiRes = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01"
+        "authorization": "Bearer " + process.env.XAI_API_KEY
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: "grok-4.3",
         max_tokens: 300,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: message.slice(0, 2000) }]
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: message.slice(0, 2000) }
+        ]
       })
     });
 
     if (!apiRes.ok) {
       const errText = await apiRes.text();
-      console.error("Anthropic API error:", apiRes.status, errText);
+      console.error("xAI API error:", apiRes.status, errText);
       return res.status(502).json({ detail: "NOVA is having trouble thinking right now — please try again." });
     }
 
     const data = await apiRes.json();
-    const reply = (data.content || [])
-      .map(function (block) { return block.text || ""; })
-      .join("")
-      .trim() || "Sorry, I didn't quite catch that — could you rephrase?";
+    const reply =
+      (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || "").trim() ||
+      "Sorry, I didn't quite catch that — could you rephrase?";
 
     return res.status(200).json({ reply: reply, action: detectAction(message, reply) });
   } catch (err) {
